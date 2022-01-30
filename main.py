@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import time
 
 import cv2
@@ -10,10 +11,13 @@ import win32api
 import win32con
 
 import argparse
+import json
 
-mon = {"top": 445, "left": 430, "width": 480, "height": 110}
+# os.system("$PYTHONPATH='C:/Program Files/Tesseract-OCR/'")
+os.system("set PATH=%PATH%;C:/Program Files/Tesseract-OCR/")
 
 CHARS_PER_WORD = 5
+SECONDS_PER_MINUTE = 60
 
 
 def get_acc(inp, out):
@@ -68,11 +72,10 @@ def type_string(inp: str, max_chars_per_sec: float = 100) -> None:
 kernel = numpy.ones([1, 1], numpy.uint8)
 
 
-def capture_image():
+def capture_image(monitor: dict):
     global kernel
     with mss.mss() as sct:
-        im = numpy.asarray(sct.grab(mon))  # im is bgr
-
+        im = numpy.asarray(sct.grab(monitor))  # im is bgr
         min_x, max_x, min_y, max_y = get_blue_bbox(im)
 
         # replace blue with white and white w/ black
@@ -104,16 +107,23 @@ def capture_image():
 
 
 def main(wpm: int, time_limit: int = -1):
+    with open("./monitor.json", "r") as file:
+        mon = json.load(file)
     start_time = datetime.now()
+
     while (time_limit == -1) or (datetime.now() - start_time).seconds < time_limit:
-        im = capture_image()
+        im = capture_image(mon)
+        cv2.imshow("live", im)
         text = pytesseract.image_to_string(im)
 
         text = text.replace("\n", " ")
+        print(text)
+        if cv2.waitKey(5) > 0:
+            break
 
         # One screenshot per second
         time.sleep(1)
-        type_string(text, wpm * CHARS_PER_WORD)
+        type_string(text, wpm * CHARS_PER_WORD / SECONDS_PER_MINUTE)
 
 
 parser = argparse.ArgumentParser(description="Tesseract-based Autotyper")
@@ -132,3 +142,4 @@ args = parser.parse_args()
 
 wpm = args.wpm[0]
 time_limit = args.time_limit[0]
+main(wpm, time_limit)
