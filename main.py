@@ -16,6 +16,10 @@ import json
 # os.system("$PYTHONPATH='C:/Program Files/Tesseract-OCR/'")
 os.system("set PATH=%PATH%;C:/Program Files/Tesseract-OCR/")
 
+import win32stuff
+
+win32stuff.focus_window("Microsoft Edge")
+
 CHARS_PER_WORD = 5
 SECONDS_PER_MINUTE = 60
 
@@ -31,20 +35,23 @@ def get_acc(inp, out):
         pass
 
 
-def get_blue_bbox(im: numpy.ndarray) -> tuple:
+def is_blue(pixel):
+    return pixel[0] > 200 and pixel[1] < 200 and pixel[1] > 100 and pixel[2] < 100
+
+
+def is_red(pixel):
+    return pixel[0] < 100 and pixel[1] < 100 and pixel[2] > 150
+
+
+def get_char_bbox(im: numpy.ndarray) -> tuple:
     min_x = max_x = min_y = max_y = 0
     defined = False
     for x in range(im.shape[0]):
         for y in range(im.shape[1]):
-            if (
-                im[x][y][0] > 200
-                and im[x][y][1] < 200
-                and im[x][y][1] > 100
-                and im[x][y][2] < 100
-            ):
+            if is_blue(im[x][y]) or is_red(im[x][y]):
                 # it's blueish (B > 200, 100 < G < 200, R < 100)
                 if not defined:
-                    minx = max_x = x
+                    min_x = max_x = x
                     min_y = max_y = y
                     defined = True
                 else:
@@ -75,29 +82,27 @@ kernel = numpy.ones([1, 1], numpy.uint8)
 def capture_image(monitor: dict):
     global kernel
     with mss.mss() as sct:
+        start_time = datetime.now()
         im = numpy.asarray(sct.grab(monitor))  # im is bgr
-        min_x, max_x, min_y, max_y = get_blue_bbox(im)
+        print(
+            f"time taken for sct was {(datetime.now()-start_time).microseconds/10000}"
+        )
+        min_x, max_x, min_y, max_y = get_char_bbox(im)
 
         # replace blue with white and white w/ black
-        for x in range(min_x, max_x + 1):
-            for y in range(min_y, max_y + 1):
-                if (
-                    im[x][y][0] > 200
-                    and im[x][y][1] < 200
-                    and im[x][y][1] > 100
-                    and im[x][y][2] < 100
-                ):
-                    # it's blueish (B > 200, 100 < G < 200, R < 100)
-                    # so change it to white-ish
-                    im[x][y] = im[0][0]  # the first one should be white-ish
-                else:
-                    # it's white-ish
-                    im[x][y] = numpy.array(
-                        [30, 30, 30, 255]
-                    )  # slightly less dark black
+        if max_x != 0 and max_y != 0:
+            for x in range(min_x, max_x + 1):
+                for y in range(min_y, max_y + 1):
+                    if is_red(im[x][y]) or is_blue(im[x][y]):
+                        # so change it to white-ish
+                        im[x][y] = numpy.array([220, 220, 220, 255])
+                    else:
+                        # it's white-ish
+                        im[x][y] = numpy.array(
+                            [30, 30, 30, 255]
+                        )  # slightly less dark black
 
         im = cv2.resize(im, (0, 0), fx=2.0, fy=2.0)
-
         im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 
         im = cv2.dilate(im, kernel)
@@ -111,18 +116,20 @@ def main(wpm: int, time_limit: int = -1):
         mon = json.load(file)
     start_time = datetime.now()
 
+    iter = 1
     while (time_limit == -1) or (datetime.now() - start_time).seconds < time_limit:
         im = capture_image(mon)
-        cv2.imshow("live", im)
+        cv2.imwrite(f"./thing{iter}.jpg", im)
+        # cv2.imshow("live", im)
         text = pytesseract.image_to_string(im)
 
         text = text.replace("\n", " ")
+        text = text.replace("  ", " ")
         print(text)
-        if cv2.waitKey(5) > 0:
-            break
 
-        # One screenshot per second
-        time.sleep(1)
+        # if cv2.waitKey(5) > 0:
+        #    break
+        iter += 1
         type_string(text, wpm * CHARS_PER_WORD / SECONDS_PER_MINUTE)
 
 
