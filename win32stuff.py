@@ -5,11 +5,11 @@ import win32api
 
 def winEnumHandler(hwnd, windows):
     if win32gui.IsWindowVisible(hwnd):
-        print(hwnd, win32gui.GetWindowText(hwnd))
+        # print(hwnd, win32gui.GetWindowText(hwnd))
         windows[win32gui.GetWindowText(hwnd)] = hwnd
 
 
-def focus_window(window_title: str):
+async def focus_window(window_title: str):
     windows = {}
     win32gui.EnumWindows(winEnumHandler, windows)
 
@@ -17,7 +17,7 @@ def focus_window(window_title: str):
     for title, hwnd in windows.items():
         valid = all([word in title for word in words])
         if valid:
-            # it's microsoft edge
+            # it's the desired window
 
             # attach the current process to the thread
             remote_thread, _ = wproc.GetWindowThreadProcessId(hwnd)

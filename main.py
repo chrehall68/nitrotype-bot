@@ -1,9 +1,9 @@
+import asyncio
 from datetime import datetime
 import os
 import time
 
 import cv2
-import mss
 import numpy
 import pytesseract
 
@@ -17,8 +17,8 @@ import json
 os.system("set PATH=%PATH%;C:/Program Files/Tesseract-OCR/")
 
 import win32stuff
+import screenshot
 
-win32stuff.focus_window("Microsoft Edge")
 
 CHARS_PER_WORD = 5
 SECONDS_PER_MINUTE = 60
@@ -62,7 +62,7 @@ def get_char_bbox(im: numpy.ndarray) -> tuple:
     return min_x, max_x, min_y, max_y
 
 
-def type_string(inp: str, max_chars_per_sec: float = 100) -> None:
+async def type_string(inp: str, max_chars_per_sec: float = 100) -> None:
     for char in inp:
         char_vk = win32api.VkKeyScan(char)
         if char.isupper():
@@ -79,50 +79,59 @@ def type_string(inp: str, max_chars_per_sec: float = 100) -> None:
 kernel = numpy.ones([1, 1], numpy.uint8)
 
 
-def capture_image(monitor: dict):
+def capture_image(screenshotter: screenshot.SectionCapture):
     global kernel
-    with mss.mss() as sct:
-        start_time = datetime.now()
-        im = numpy.asarray(sct.grab(monitor))  # im is bgr
-        print(
-            f"time taken for sct was {(datetime.now()-start_time).microseconds/10000}"
-        )
-        min_x, max_x, min_y, max_y = get_char_bbox(im)
+    start_time = datetime.now()
+    im = screenshotter.get_screenshot()  # im is bgr
+    print(f"time taken for sct was {(datetime.now()-start_time).microseconds/1000000}")
+    min_x, max_x, min_y, max_y = get_char_bbox(im)
 
-        # replace blue with white and white w/ black
-        if max_x != 0 and max_y != 0:
-            for x in range(min_x, max_x + 1):
-                for y in range(min_y, max_y + 1):
-                    if is_red(im[x][y]) or is_blue(im[x][y]):
-                        # so change it to white-ish
-                        im[x][y] = numpy.array([220, 220, 220, 255])
-                    else:
-                        # it's white-ish
-                        im[x][y] = numpy.array(
-                            [30, 30, 30, 255]
-                        )  # slightly less dark black
+    # replace blue with white and white w/ black
+    if max_x != 0 and max_y != 0:
+        for x in range(min_x, max_x + 1):
+            for y in range(min_y, max_y + 1):
+                if is_red(im[x][y]) or is_blue(im[x][y]):
+                    # so change it to white-ish
+                    im[x][y] = numpy.array([220, 220, 220])
+                else:
+                    # it's white-ish
+                    im[x][y] = numpy.array([20, 20, 20])  # slightly less dark black
 
-        im = cv2.resize(im, (0, 0), fx=2.0, fy=2.0)
-        im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+    im = cv2.resize(im, (0, 0), fx=2.0, fy=2.0)
+    im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
 
-        im = cv2.dilate(im, kernel)
-        im = cv2.erode(im, kernel)
+    im = cv2.dilate(im, kernel)
+    im = cv2.erode(im, kernel)
 
-        return im
+    return im
 
 
-def main(wpm: int, time_limit: int = -1):
+async def read_monitor_info(output_dict: dict):
     with open("./monitor.json", "r") as file:
-        mon = json.load(file)
+        temp = json.load(file)
+        for item, key in temp.items():
+            output_dict[item] = key
+        file.close()
+
+
+async def main(wpm: int, time_limit: int = -1):
+    mon = {}
+    await asyncio.gather(
+        win32stuff.focus_window("Microsoft Edge"), read_monitor_info(mon)
+    )
+    screenshotter = screenshot.SectionCapture(
+        mon["top"], mon["left"], mon["width"], mon["height"]
+    )
     start_time = datetime.now()
 
     iter = 1
     while (time_limit == -1) or (datetime.now() - start_time).seconds < time_limit:
-        im = capture_image(mon)
-        cv2.imwrite(f"./thing{iter}.jpg", im)
+        im = capture_image(screenshotter)
         # cv2.imshow("live", im)
+        # cv2.imwrite(f"thing{iter}.jpg", im)
+        time_2 = datetime.now()
         text = pytesseract.image_to_string(im)
-
+        print(f"time taken for ocr was {(datetime.now()-time_2).microseconds/1000000}")
         text = text.replace("\n", " ")
         text = text.replace("  ", " ")
         print(text)
@@ -130,7 +139,7 @@ def main(wpm: int, time_limit: int = -1):
         # if cv2.waitKey(5) > 0:
         #    break
         iter += 1
-        type_string(text, wpm * CHARS_PER_WORD / SECONDS_PER_MINUTE)
+        await type_string(text, wpm * CHARS_PER_WORD / SECONDS_PER_MINUTE)
 
 
 parser = argparse.ArgumentParser(description="Tesseract-based Autotyper")
@@ -149,4 +158,4 @@ args = parser.parse_args()
 
 wpm = args.wpm[0]
 time_limit = args.time_limit[0]
-main(wpm, time_limit)
+asyncio.run(main(wpm, time_limit))

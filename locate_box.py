@@ -4,7 +4,7 @@ import tkinter
 import numpy
 from tqdm import tqdm
 
-from mss import mss
+from screenshot import SectionCapture
 
 
 def get_full_monitor():
@@ -42,7 +42,7 @@ def get_typing_screen(im):
                 if (
                     temp_span_x * temp_span_y > span_x * span_y
                     and temp_span_y < im.shape[1] * 0.75
-                    and temp_span_x > 50
+                    and temp_span_x > 100
                 ):
                     # the text box can't be more than 75% of the screen's width
                     # the text box must be at least 50 px tall
@@ -50,7 +50,7 @@ def get_typing_screen(im):
                     top_x, top_y = x - temp_span_x, y - temp_span_y
             y += 1
 
-    if span_x < 50:
+    if span_x < 100:
         return None
     return top_x, top_y, span_x, span_y
 
@@ -61,15 +61,20 @@ print(
 )
 
 full_monitor = get_full_monitor()
-with mss() as sct:
-    while True:
-        im = numpy.asarray(sct.grab(full_monitor))
-        new_mon = get_typing_screen(im)
-        if new_mon is not None:
-            break
-        print("Please be on your nitro-type screen!")
-        print("will try to locate the text box again in 3 seconds.")
-        sleep(3)
+sct = SectionCapture(
+    full_monitor["top"],
+    full_monitor["left"],
+    full_monitor["width"],
+    full_monitor["height"],
+)
+while True:
+    im = numpy.asarray(sct.get_screenshot())
+    new_mon = get_typing_screen(im)
+    if new_mon is not None:
+        break
+    print("Please be on your nitro-type screen!")
+    print("will try to locate the text box again in 3 seconds.")
+    sleep(3)
 
 with open("./monitor.json", "w") as file:
     monitor_settings = {

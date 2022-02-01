@@ -19,7 +19,7 @@ class WindowCapture:
         # find the handle for the window we want to capture
         self.hwnd = win32gui.FindWindow(None, window_name)
         if not self.hwnd:
-            raise Exception('Window not found: {}'.format(window_name))
+            raise Exception("Window not found: {}".format(window_name))
 
         print(type(self.hwnd))
         print(self.hwnd)
@@ -50,12 +50,18 @@ class WindowCapture:
         dataBitMap = win32ui.CreateBitmap()
         dataBitMap.CreateCompatibleBitmap(dcObj, self.w, self.h)
         cDC.SelectObject(dataBitMap)
-        cDC.BitBlt((0, 0), (self.w, self.h), dcObj, (self.cropped_x, self.cropped_y), win32con.SRCCOPY)
+        cDC.BitBlt(
+            (0, 0),
+            (self.w, self.h),
+            dcObj,
+            (self.cropped_x, self.cropped_y),
+            win32con.SRCCOPY,
+        )
 
         # convert the raw data into a format opencv can read
-        #dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
+        # dataBitMap.SaveBitmapFile(cDC, 'debug.bmp')
         signedIntsArray = dataBitMap.GetBitmapBits(True)
-        img = np.fromstring(signedIntsArray, dtype='uint8')
+        img = np.fromstring(signedIntsArray, dtype="uint8")
         img.shape = (self.h, self.w, 4)
 
         # free resources
@@ -65,9 +71,9 @@ class WindowCapture:
         win32gui.DeleteObject(dataBitMap.GetHandle())
 
         # drop the alpha channel, or cv.matchTemplate() will throw an error like:
-        #   error: (-215:Assertion failed) (depth == CV_8U || depth == CV_32F) && type == _templ.type() 
+        #   error: (-215:Assertion failed) (depth == CV_8U || depth == CV_32F) && type == _templ.type()
         #   && _img.dims() <= 2 in function 'cv::matchTemplate'
-        img = img[...,:3]
+        img = img[..., :3]
 
         # make image C_CONTIGUOUS to avoid errors that look like:
         #   File ... in draw_rectangles
@@ -78,14 +84,10 @@ class WindowCapture:
 
         return img
 
-# slower than choosing a specific window, but useful for debugging
-class FullWindowCapture(WindowCapture):
-    def __init__(self, width:int=1920, height :int= 1080):
+
+class SectionCapture(WindowCapture):
+    def __init__(self, top: int, left: int, width: int, height: int):
         self.w = width
         self.h = height
-        self.cropped_x = 0
-        self.cropped_y = 0
-        self.hwnd = None
-
-    def get_screenshot(self):
-        return super().get_screenshot()
+        self.cropped_x = left
+        self.cropped_y = top
