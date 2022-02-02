@@ -108,6 +108,14 @@ async def read_monitor_info(output_dict: dict):
         file.close()
 
 
+async def read_browser_info(output_dict: dict):
+    with open("./browser.json", "r") as file:
+        temp = json.load(file)
+        for item, key in temp.items():
+            output_dict[item] = key
+        file.close()
+
+
 def get_text(screenshotter):
     global text, prev_text, run, prev_im
     iter = 1
@@ -129,9 +137,10 @@ async def dev_main(speed: int, num_races: int):
     global text, run
     print("starting")
     mon = {}
-    await asyncio.gather(
-        win32stuff.focus_window("Microsoft Edge"), read_monitor_info(mon)
-    )
+    browser = {}
+    await asyncio.gather(read_browser_info(browser), read_monitor_info(mon))
+    win32stuff.focus_window(browser["browser"])
+
     screenshotter = screenshot.SectionCapture(
         mon["top"], mon["left"], mon["width"], mon["height"]
     )
