@@ -1,38 +1,16 @@
-import asyncio
+import win32stuff
 from datetime import datetime
-import os
-import time
-
-import cv2
+import asyncio
 import numpy
+import cv2
+import json
+import screenshot
 import pytesseract
-
+import threading
 import win32api
 import win32con
-
+import time
 import argparse
-import json
-
-# os.system("$PYTHONPATH='C:/Program Files/Tesseract-OCR/'")
-os.system("set PATH=%PATH%;C:/Program Files/Tesseract-OCR/")
-
-import win32stuff
-import screenshot
-
-
-CHARS_PER_WORD = 5
-SECONDS_PER_MINUTE = 60
-
-
-def get_acc(inp, out):
-    mistakes = 0
-    try:
-        for i in range(len(out)):
-            if inp[i] != out[i]:
-                mistakes += 1
-        print(f"accuracy is {(len(out)-mistakes)/len(out)}")
-    except:
-        pass
 
 
 def is_blue(pixel):
@@ -41,6 +19,37 @@ def is_blue(pixel):
 
 def is_red(pixel):
     return pixel[0] < 100 and pixel[1] < 100 and pixel[2] > 150
+
+
+def is_black(gray_pixel):
+    return gray_pixel < 60
+
+
+def is_white(gray_pixel):
+    return gray_pixel > 215
+
+
+def type_string(inp: str, max_chars_per_sec: float = 100) -> None:
+    for char in inp:
+        char_vk = win32api.VkKeyScan(char)
+        if char.isupper():
+            win32api.keybd_event(win32con.VK_SHIFT, 0, 0, 0)
+            win32api.keybd_event(char_vk, 0, 0, 0)
+            win32api.keybd_event(win32con.VK_SHIFT, 0, win32con.KEYEVENTF_KEYUP, 0)
+            win32api.keybd_event(char_vk, 0, win32con.KEYEVENTF_KEYUP, 0)
+        else:
+            win32api.keybd_event(char_vk, 0, 0, 0)
+            win32api.keybd_event(char_vk, 0, win32con.KEYEVENTF_KEYUP, 0)
+        time.sleep(1 / max_chars_per_sec)
+
+
+async def press_enter():
+    win32api.keybd_event(win32con.VK_RETURN, 0, 0, 0)
+    win32api.keybd_event(win32con.VK_RETURN, 0, win32con.KEYEVENTF_KEYUP, 0)
+    await asyncio.sleep(0.001)
+
+
+kernel = numpy.ones([1, 1], numpy.uint8)
 
 
 def get_char_bbox(im: numpy.ndarray) -> tuple:
@@ -62,28 +71,13 @@ def get_char_bbox(im: numpy.ndarray) -> tuple:
     return min_x, max_x, min_y, max_y
 
 
-async def type_string(inp: str, max_chars_per_sec: float = 100) -> None:
-    for char in inp:
-        char_vk = win32api.VkKeyScan(char)
-        if char.isupper():
-            win32api.keybd_event(win32con.VK_SHIFT, 0, 0, 0)
-            win32api.keybd_event(char_vk, 0, 0, 0)
-            win32api.keybd_event(win32con.VK_SHIFT, 0, win32con.KEYEVENTF_KEYUP, 0)
-            win32api.keybd_event(char_vk, 0, win32con.KEYEVENTF_KEYUP, 0)
-        else:
-            win32api.keybd_event(char_vk, 0, 0, 0)
-            win32api.keybd_event(char_vk, 0, win32con.KEYEVENTF_KEYUP, 0)
-        time.sleep(1 / max_chars_per_sec)
-
-
-kernel = numpy.ones([1, 1], numpy.uint8)
-
-
 def capture_image(screenshotter: screenshot.SectionCapture):
     global kernel
     start_time = datetime.now()
     im = screenshotter.get_screenshot()  # im is bgr
-    print(f"time taken for sct was {(datetime.now()-start_time).microseconds/1000000}")
+    print(
+        f"time taken for sct was {(datetime.now()-start_time).seconds + (datetime.now()-start_time).microseconds/1000000}"
+    )
     min_x, max_x, min_y, max_y = get_char_bbox(im)
 
     # replace blue with white and white w/ black
@@ -114,7 +108,26 @@ async def read_monitor_info(output_dict: dict):
         file.close()
 
 
-async def main(wpm: int, time_limit: int = -1):
+def get_text(screenshotter):
+    global text, prev_text, run, prev_im
+    iter = 1
+    while run:
+        im = capture_image(screenshotter)
+        prev_im = im.copy()
+        text = pytesseract.image_to_string(im)
+        text = text.replace("\n", " ")
+
+        iter += 1
+
+
+prev_im = [[0]]
+run = True
+text = ""
+
+
+async def dev_main(speed: int, num_races: int):
+    global text, run
+    print("starting")
     mon = {}
     await asyncio.gather(
         win32stuff.focus_window("Microsoft Edge"), read_monitor_info(mon)
@@ -122,24 +135,36 @@ async def main(wpm: int, time_limit: int = -1):
     screenshotter = screenshot.SectionCapture(
         mon["top"], mon["left"], mon["width"], mon["height"]
     )
-    start_time = datetime.now()
 
-    iter = 1
-    while (time_limit == -1) or (datetime.now() - start_time).seconds < time_limit:
-        im = capture_image(screenshotter)
-        # cv2.imshow("live", im)
-        # cv2.imwrite(f"thing{iter}.jpg", im)
-        time_2 = datetime.now()
-        text = pytesseract.image_to_string(im)
-        print(f"time taken for ocr was {(datetime.now()-time_2).microseconds/1000000}")
-        text = text.replace("\n", " ")
-        text = text.replace("  ", " ")
-        print(text)
+    a = threading.Thread(None, get_text, args=[screenshotter])
+    a.start()
 
-        # if cv2.waitKey(5) > 0:
-        #    break
-        iter += 1
-        await type_string(text, wpm * CHARS_PER_WORD / SECONDS_PER_MINUTE)
+    races = 0
+
+    # wait for the initial blackish screen to pass
+    if is_black(prev_im[0][0]):
+        await press_enter()
+        while not is_white(prev_im[0][0]):
+            time.sleep(0.00001)
+
+    try:
+        while races < num_races:
+            type_string(text, speed)
+
+            # if the race's over
+            if is_black(prev_im[0][0]):
+                races += 1
+                if races < num_races:
+                    await press_enter()
+
+                    while not is_white(prev_im[0][0]):
+                        time.sleep(0.00001)
+        run = False
+        a.join()
+    except KeyboardInterrupt:
+        run = False
+        a.join()
+    print("finished")
 
 
 parser = argparse.ArgumentParser(description="Tesseract-based Autotyper")
@@ -147,15 +172,16 @@ parser.add_argument(
     "wpm", metavar="WPM", type=int, nargs=1, help="desired wpm to type at"
 )
 parser.add_argument(
-    "time_limit",
-    metavar="T",
+    "num_races",
+    metavar="R",
     type=int,
     nargs=1,
-    help="max time to type; -1 to type forever",
+    help="number of races to complete",
 )
 
 args = parser.parse_args()
 
 wpm = args.wpm[0]
-time_limit = args.time_limit[0]
-asyncio.run(main(wpm, time_limit))
+num_races = args.num_races[0]
+
+asyncio.run(dev_main(wpm, num_races))
