@@ -9,4 +9,4 @@ A simple autotyper built in python
 
 ## Run
 In order to run the autotyper, it's simple. Just open up your command promt
-and run `main.py` in the directory where this repo is.
+and run `main.py (WPM) (NUMBER OF RACES)` in the directory where this repo is.
