@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from screenshot import SectionCapture
 from win32stuff import focus_window
+import asyncio
 
 
 def get_full_monitor():
@@ -70,7 +71,7 @@ sct = SectionCapture(
 )
 with open("./browser.json", "r") as file:
     browser = json.load(file)
-    focus_window(browser['browser'])
+    asyncio.run(focus_window(browser["browser"]))
     file.close()
 while True:
     im = numpy.asarray(sct.get_screenshot())
