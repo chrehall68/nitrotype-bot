@@ -9,11 +9,14 @@ Once locate_box.exe has finished, setup is complete.
 
 Now, make sure nitrotype is open. In the terminal, run `main.exe (MIN WPM) (NUMBER OF RACES)` and watch the bot type.
 
-Example:
+### Example:
 
 Your screen should have the text box something like this:
-![]('./pre-locate_box screen')
+
+![image](./screen.png)
+
 Then, run `locate_box.exe` in the terminal
 
 After it has finished, run
 `main.exe 100 3`
+in the terminal.
