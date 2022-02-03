@@ -139,7 +139,7 @@ async def dev_main(speed: int, num_races: int):
     mon = {}
     browser = {}
     await asyncio.gather(read_browser_info(browser), read_monitor_info(mon))
-    win32stuff.focus_window(browser["browser"])
+    await win32stuff.focus_window(browser["browser"])
 
     screenshotter = screenshot.SectionCapture(
         mon["top"], mon["left"], mon["width"], mon["height"]
