@@ -11,6 +11,9 @@ Now, make sure nitrotype is open. In the terminal, run `main.exe (MIN WPM) (NUMB
 
 Example:
 
-`locate_box.exe`
+Your screen should have the text box something like this:
+![]('./pre-locate_box screen')
+Then, run `locate_box.exe` in the terminal
 
+After it has finished, run
 `main.exe 100 3`
