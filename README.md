@@ -1,5 +1,9 @@
 # nitrotype-bot
 
+## Install Requirements
+[tesseract](https://github.com/UB-Mannheim/tesseract/wiki)  -  the OCR used
+
+
 ## How to run
 First, open a terminal in the folder where you installed this app.
 
